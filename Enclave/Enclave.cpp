@@ -289,6 +289,7 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		for (int i = 0; i < top_k; i++) {
 			int user_index = q.top().second;
 			top_k_user[i] = user_index;
+			q.pop();
 		}
 		memcpy(question_top_k_user + question_id * top_k, &top_k_user[0],
 				top_k * sizeof(int));

@@ -160,7 +160,7 @@ void ocall_load_words_vectors(char *raw_words, int *words_size, float *vectors,
 		int end_loc = start_loc + word_size;
 		string word(raw_words + start_loc, word_size);
 		auto vec = word_model.get_vec(word);
-		memcpy(vectors+i*dimension, &vec[0], dimension * sizeof(float));
+		memcpy(vectors + i * dimension, &vec[0], dimension * sizeof(float));
 		start_loc = end_loc;
 	}
 }
@@ -174,20 +174,20 @@ void ocall_print_string(const char *str) {
 }
 
 void ocall_print_int_array(int *arr, int len) {
-	for(int i=0;i<len;i++){
-		cout<<arr[i]<<" ";
+	for (int i = 0; i < len; i++) {
+		cout << arr[i] << " ";
 	}
-	cout<<endl;
+	cout << endl;
 }
 
 void ocall_print_float_array(float *arr, int len) {
-	for(int i=0;i<len;i++){
-		cout<<arr[i]<<" ";
+	for (int i = 0; i < len; i++) {
+		cout << arr[i] << " ";
 	}
-	cout<<endl;
+	cout << endl;
 }
 
-void test_texttruth(bool oblivious = false) {
+void test_texttruth(bool oblivious = false, int top_k = 10) {
 
 	// load dataset answer grading
 	const string dataset_path = "answer_grading";
@@ -195,9 +195,9 @@ void test_texttruth(bool oblivious = false) {
 	AnswerGradingData answer_grade_data;
 	answer_grade_data.load_dataset(dataset_path);
 
-    /*word_model.load_raw_file("./pre-trained_model/glove.twitter.27B.100d.txt");
-    word_model.save_model(model_path);
-    return;*/
+	/*word_model.load_raw_file("./pre-trained_model/glove.twitter.27B.100d.txt");
+	 word_model.save_model(model_path);
+	 return;*/
 	auto start = high_resolution_clock::now();
 	word_model.load_model(model_path);
 	auto stop = high_resolution_clock::now();
@@ -248,70 +248,77 @@ void test_texttruth(bool oblivious = false) {
 	}
 
 	// benchmark texttruth
-	for (int top_k = 1; top_k <=10; top_k += 1) {
-		cout << "top " << top_k << endl;
-		int *question_top_k_user = new int[question_num * top_k];
-		start = high_resolution_clock::now();
-		// get top_k_user for each question from truth discovery
-		if (!oblivious) {
-			//test(global_eid);
-			cout<<"non oblivious truth top "<<top_k<<endl;
-			sgx_status_t ret = ecall_ttruth(global_eid, question_top_k_user,
-					question_num, user_num, top_k,
-					AnswerGradingData::key_factor_number, VECTOR_SIZE,
-					question_num * top_k);
 
-			if (ret != SGX_SUCCESS) {
-				print_error_message(ret);
-				throw("truth discover fail");
-			}
-		} else {
-			cout<<"oblivious truth top "<<top_k<<endl;
+	cout << "top " << top_k << endl;
+	int *question_top_k_user = new int[question_num * top_k];
+	start = high_resolution_clock::now();
+	// get top_k_user for each question from truth discovery
+	if (!oblivious) {
+		//test(global_eid);
+		cout << "non oblivious truth top " << top_k << endl;
+		sgx_status_t ret = ecall_ttruth(global_eid, question_top_k_user,
+				question_num, user_num, top_k,
+				AnswerGradingData::key_factor_number, VECTOR_SIZE,
+				question_num * top_k);
 
-			sgx_status_t ret = ecall_oblivious_ttruth(global_eid, question_top_k_user,
-								question_num, user_num, top_k,
-								AnswerGradingData::key_factor_number, VECTOR_SIZE,
-								question_num * top_k);
-
-						if (ret != SGX_SUCCESS) {
-							print_error_message(ret);
-							throw("truth discover fail");
-						}
+		if (ret != SGX_SUCCESS) {
+			print_error_message(ret);
+			throw("truth discover fail");
 		}
+	} else {
+		cout << "oblivious truth top " << top_k << endl;
 
-		stop = high_resolution_clock::now();
-		duration = duration_cast<microseconds>(stop - start);
-		std::cout << "truth discovery time "
-				<< (double) duration.count() / 1000000.0 << "s" << endl;
+		sgx_status_t ret = ecall_oblivious_ttruth(global_eid,
+				question_top_k_user, question_num, user_num, top_k,
+				AnswerGradingData::key_factor_number, VECTOR_SIZE,
+				question_num * top_k);
 
-		// show the average score for each exam
-		vector<double> exam_score(question_per_exam.size(), 0);
-		int count = 0;
-		int exam_id = 0;
-		for (int question_id = 0; question_id < question_num; question_id++) {
-			if (count == question_per_exam[exam_id]) {
-				count = 0;
-				exam_id += 1;
-			}
-			vector<int> top_k_user(question_top_k_user+question_id * top_k,
-					question_top_k_user+(question_id + 1) * top_k);
-
-			for (auto user_index : top_k_user) {
-				double score = baseline_scores[question_id][user_index];
-				exam_score[exam_id] += score;
-			}
-			count += 1;
+		if (ret != SGX_SUCCESS) {
+			print_error_message(ret);
+			throw("truth discover fail");
 		}
-
-		// average exam_score;
-		int exam_num = int(exam_score.size());
-		for (int i = 0; i < exam_num; i++) {
-			exam_score[i] /= top_k * question_per_exam[i];
-			cout << "exam " << i + 1 << " avg score: " << exam_score[i] << endl;
-		}
-
-		delete[] question_top_k_user;
 	}
+
+	stop = high_resolution_clock::now();
+	duration = duration_cast<microseconds>(stop - start);
+	std::cout << "truth discovery time "
+			<< (double) duration.count() / 1000000.0 << "s" << endl;
+
+	// show the average score for each exam
+	vector<vector<double>> exam_score(question_per_exam.size(),
+			vector<double>(top_k));
+	int count = 0;
+	int exam_id = 0;
+	for (int question_id = 0; question_id < question_num; question_id++) {
+		if (count == question_per_exam[exam_id]) {
+			count = 0;
+			exam_id += 1;
+		}
+		vector<int> top_k_user(question_top_k_user + question_id * top_k,
+				question_top_k_user + (question_id + 1) * top_k);
+
+		for (int i = 0; i < top_k; i++) {
+			int user_index = top_k_user[i];
+			double score = baseline_scores[question_id][user_index];
+			exam_score[exam_id][i] += score;
+		}
+		count += 1;
+	}
+
+	// average exam_score;
+	int exam_num = int(exam_score.size());
+	for (int i = 0; i < exam_num; i++) {
+		double total_score = 0;
+		for (int j = 0; j < top_k; j++) {
+			exam_score[i][j] /= question_per_exam[i];
+			total_score += exam_score[i][j];
+			cout << "exam " << i + 1 << " top avg " << j << " : "
+					<< total_score / (j + 1) << endl;
+		}
+	}
+
+	delete[] question_top_k_user;
+
 	delete[] question_solutions;
 	for (int i = 0; i < question_num; i++) {
 		delete[] question_solutions[i];
@@ -334,7 +341,8 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 	bool oblivious = false;
-	test_texttruth(oblivious);
+	int top_k = 10;
+	test_texttruth(oblivious,top_k);
 	// Destroy the enclave
 	sgx_destroy_enclave(global_eid);
 
