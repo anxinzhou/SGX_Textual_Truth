@@ -109,6 +109,7 @@ inline float distance_metrics(const WordVec &a, const WordVec &b) {
 	return abs(2 - 2 * hpc::dot_product(a, b));
 }
 
+
 vector<WordVec> oblivious_kmeans_init(vector<Keyword> &keywords,
 		WordModel &word_model, int cluster_num) {
 

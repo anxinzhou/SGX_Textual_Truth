@@ -170,7 +170,7 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		filtered_raw_words[filter_words_total_size] = '\0';
 		for (int i = 0; i < word_num; i++) {
 			if (words_filter_ind[i] == 0) {
-				string word(raw_words + words_start_loc, words_size[i]);
+				//string word(raw_words + words_start_loc, words_size[i]);
 				memcpy(filtered_raw_words + filter_words_start_loc,
 						raw_words + words_start_loc, words_size[i]);
 				filter_words_start_loc += words_size[i];
@@ -204,7 +204,30 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		delete[] word_vectors;
 
 		// clustering
-		sphere_kmeans(keywords, word_model, cluster_size);
+		// prepare weighted words
+		unordered_map<string, int> kw_counter;
+		for (auto &kw : keywords) {
+			kw_counter[kw.content] += 1;
+		}
+		vector<string> kws;
+		vector<int> weight;
+		for (auto &p : kw_counter) {
+			kws.push_back(std::move(p.first));
+			weight.push_back(p.second);
+		}
+		auto cluster_assignment = weighted_sphere_kmeans(kws, weight,
+				word_model, cluster_size);
+		unordered_map<string, int> kw_cluster_ind;
+		for (int i = 0; i < kws.size(); i++) {
+			kw_cluster_ind.emplace(
+					std::make_pair(std::move(kws[i]), cluster_assignment[i]));
+		}
+		// assign cluster to keywords
+		for (auto &kw : keywords) {
+			kw.cluster_assignment = kw_cluster_ind[kw.content];
+		}
+		// old version
+		//sphere_kmeans(keywords, word_model, cluster_size);
 
 		// update observation
 		observation_update(observations, keywords);
@@ -330,13 +353,12 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		keywords_padding(keywords);
 		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
 
-
 		//for(auto &kw: keywords) {
-			//ocall_print_string((to_string(kw.content.size())+"\n").c_str());
+		//ocall_print_string((to_string(kw.content.size())+"\n").c_str());
 		//}
 		unordered_set<string> test_voc;
-		for(auto &kw:keywords) {
-			if(test_voc.count(kw.content)==0) {
+		for (auto &kw : keywords) {
+			if (test_voc.count(kw.content) == 0) {
 				test_voc.insert(kw.content);
 			}
 		}
@@ -353,7 +375,8 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 
 		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
 
-		oblivious_dummy_words_addition(padded_vocabulary, keywords, epsilon, delta);
+		oblivious_dummy_words_addition(padded_vocabulary, keywords, epsilon,
+				delta);
 		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
 
 		// remove padding
@@ -433,7 +456,7 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		filtered_raw_words[filter_words_total_size] = '\0';
 		for (int i = 0; i < word_num; i++) {
 			if (words_filter_ind[i] == 0) {
-				string word(raw_words + words_start_loc, words_size[i]);
+				//string word(raw_words + words_start_loc, words_size[i]);
 				memcpy(filtered_raw_words + filter_words_start_loc,
 						raw_words + words_start_loc, words_size[i]);
 				filter_words_start_loc += words_size[i];
@@ -467,7 +490,34 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		delete[] word_vectors;
 
 		// clustering
-		oblivious_sphere_kmeans(keywords, word_model, cluster_size);
+		// prepare weighted words
+		unordered_map<string, int> kw_counter;
+		for (auto &kw : keywords) {
+			if(kw_counter.count(kw.content) ==0) {
+				kw_counter[kw.content] = 1*(kw.owner_id != -1);
+			} else {
+				kw_counter[kw.content] += 1*(kw.owner_id != -1);
+			}
+		}
+		vector<string> kws;
+		vector<int> weight;
+		for (auto &p : kw_counter) {
+			kws.push_back(std::move(p.first));
+			weight.push_back(p.second);
+		}
+		auto cluster_assignment = weighted_sphere_kmeans(kws, weight,
+				word_model, cluster_size);
+		unordered_map<string, int> kw_cluster_ind;
+		for (int i = 0; i < kws.size(); i++) {
+			kw_cluster_ind.emplace(
+					std::make_pair(std::move(kws[i]), cluster_assignment[i]));
+		}
+		// assign cluster to keywords
+		for (auto &kw : keywords) {
+			kw.cluster_assignment = kw_cluster_ind[kw.content];
+		}
+		// old version
+		//oblivious_sphere_kmeans(keywords, word_model, cluster_size);
 
 		// remove dummy words
 		//shuffle to hide how many counts dummy for each word
@@ -493,7 +543,8 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 	}
 
 	// latent truth discovery
-	auto question_truth_indicator = oblivious_latent_truth_model(question_observations);
+	auto question_truth_indicator = oblivious_latent_truth_model(
+			question_observations);
 	/*for(int i=0;i<question_truth_indicator.size();i++) {
 	 ocall_print_int_array(&question_truth_indicator[i][0], question_truth_indicator[i].size());
 
@@ -504,7 +555,6 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 
 	// calculate score of each usre and get the top_k_user of each question
 
-
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		// calculate truth score of each answer
 		vector<double> user_answer_score(user_num);
@@ -514,9 +564,10 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 			auto &truth_indicator = question_truth_indicator[question_id];
 			int indicator = 0;
 			// obliviously get indicator
-			for(int k=0;k<truth_indicator.size();k++) {
+			for (int k = 0; k < truth_indicator.size(); k++) {
 				int ind = truth_indicator[k];
-				indicator = oblivious_assign_CMOV(k==cluster_assignment,ind,indicator);
+				indicator = oblivious_assign_CMOV(k == cluster_assignment, ind,
+						indicator);
 			}
 
 			user_answer_score[owner_id] += 1 * (indicator == 1);

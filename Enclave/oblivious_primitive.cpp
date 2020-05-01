@@ -19,6 +19,7 @@ uint32_t oblivious_assign_CMOV(uint8_t pred, uint32_t t_val, uint32_t f_val) {
     :"cc"
     );
     return result;*/
+	// compile with -O3  will generate cmov
 	return pred ? t_val:f_val;
 }
 

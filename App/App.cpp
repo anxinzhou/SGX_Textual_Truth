@@ -248,7 +248,7 @@ void test_texttruth(bool oblivious = false) {
 	}
 
 	// benchmark texttruth
-	for (int top_k = 1; top_k <=1; top_k += 1) {
+	for (int top_k = 1; top_k <=10; top_k += 1) {
 		cout << "top " << top_k << endl;
 		int *question_top_k_user = new int[question_num * top_k];
 		start = high_resolution_clock::now();
@@ -333,7 +333,7 @@ int main(int argc, char *argv[]) {
 		print_error_message(ret);
 		return -1;
 	}
-	bool oblivious = true;
+	bool oblivious = false;
 	test_texttruth(oblivious);
 	// Destroy the enclave
 	sgx_destroy_enclave(global_eid);
