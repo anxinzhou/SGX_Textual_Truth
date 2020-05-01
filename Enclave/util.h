@@ -8,6 +8,25 @@
 #include <sgx_intrin.h>
 #include <vector>
 
+namespace myRand {
+	static unsigned long next = 1;
+	const unsigned int MY_RAND_MAX = 32768;
+
+	/* RAND_MAX assumed to be 32767 */
+	inline int myrand_int(void) {
+		next = next * 1103515245 + 12345;
+		return((unsigned)(next/65536) % 32768);
+	}
+
+	inline double myrandom() {
+		return (double) myrand_int()/MY_RAND_MAX;
+	}
+
+	inline void mysrand(unsigned seed) {
+	    next = seed;
+	}
+}
+
 namespace hpc {
     inline bool array_equal(std::vector<int> &a, std::vector<int> &b);
 

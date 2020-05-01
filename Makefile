@@ -98,7 +98,7 @@ else
         App_C_Flags += -DNDEBUG -UEDEBUG -UDEBUG
 endif
 
-App_Cpp_Flags := $(App_C_Flags) -mavx2
+App_Cpp_Flags := $(App_C_Flags) -mavx -msse2 -mavx2
 App_Link_Flags := -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lboost_serialization -lboost_filesystem -lboost_system
 
 App_Cpp_Objects := $(App_Cpp_Files:.cpp=.o)
@@ -130,7 +130,7 @@ Enclave_Cpp_Files := Enclave/Enclave.cpp $(wildcard Enclave/*.cpp)
 Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/libcxx -I$(SGX_SDK)/include/tlibc -I/usr/lib/gcc/x86_64-linux-gnu/7/include
 
 Enclave_C_Flags := -nostdinc -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths) 
-Enclave_Cpp_Flags := $(Enclave_C_Flags) -nostdinc++ -mavx2
+Enclave_Cpp_Flags := $(Enclave_C_Flags) -nostdinc++ -mavx -msse2 -mavx2
 
 # Enable the security flags
 Enclave_Security_Link_Flags := -Wl,-z,relro,-z,now,-z,noexecstack

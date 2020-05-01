@@ -47,10 +47,6 @@
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/unordered_set.hpp>
-#include <boost/chrono/duration.hpp>
-#include <boost/chrono/time_point.hpp>
-#include <boost/chrono/system_clocks.hpp>
-#include <boost/chrono/typeof/boost/chrono/chrono.hpp>
 #include <chrono>
 
 #define ENCLAVE_NAME "enclave.signed.so"
@@ -254,11 +250,12 @@ void test_texttruth(bool oblivious = false) {
 	// benchmark texttruth
 	for (int top_k = 1; top_k <=1; top_k += 1) {
 		cout << "top " << top_k << endl;
-		start = high_resolution_clock::now();
 		int *question_top_k_user = new int[question_num * top_k];
+		start = high_resolution_clock::now();
 		// get top_k_user for each question from truth discovery
 		if (!oblivious) {
-			test(global_eid);
+			//test(global_eid);
+			cout<<"non oblivious truth top "<<top_k<<endl;
 			sgx_status_t ret = ecall_ttruth(global_eid, question_top_k_user,
 					question_num, user_num, top_k,
 					AnswerGradingData::key_factor_number, VECTOR_SIZE,
@@ -269,7 +266,17 @@ void test_texttruth(bool oblivious = false) {
 				throw("truth discover fail");
 			}
 		} else {
+			cout<<"oblivious truth top "<<top_k<<endl;
 
+			sgx_status_t ret = ecall_oblivious_ttruth(global_eid, question_top_k_user,
+								question_num, user_num, top_k,
+								AnswerGradingData::key_factor_number, VECTOR_SIZE,
+								question_num * top_k);
+
+						if (ret != SGX_SUCCESS) {
+							print_error_message(ret);
+							throw("truth discover fail");
+						}
 		}
 
 		stop = high_resolution_clock::now();
@@ -326,8 +333,8 @@ int main(int argc, char *argv[]) {
 		print_error_message(ret);
 		return -1;
 	}
-
-	test_texttruth();
+	bool oblivious = true;
+	test_texttruth(oblivious);
 	// Destroy the enclave
 	sgx_destroy_enclave(global_eid);
 

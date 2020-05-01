@@ -85,14 +85,14 @@ void sphere_kmeans(vector<Keyword> &keywords, WordModel &word_model,
 	}
 
 	// see how many words each cluster have
-    vector<int> cluster_histogram(cluster_num,0);
+    /*vector<int> cluster_histogram(cluster_num,0);
     string countinfo;
     for(int k=0;k<keywords.size();k++) {
         cluster_histogram[keywords[k].cluster_assignment]+=1;
 
     }
 
-    /*for(int k=0;k<cluster_histogram.size();k++) {
+    for(int k=0;k<cluster_histogram.size();k++) {
     	countinfo+=to_string(cluster_histogram[k])+" ";
     }
     countinfo+="\n";

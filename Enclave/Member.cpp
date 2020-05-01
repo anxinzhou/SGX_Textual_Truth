@@ -17,6 +17,7 @@ vector<string> Answer::string_split(const string &s) {
 	while (i != s_size) {
 		while (i != s_size && s[i] == ' ')
 			i++; // skip header space;
+		if(i==s_size) break;
 		int end_loc = s.find(' ', i);
 		if (end_loc == string::npos) {
 			// no space any more

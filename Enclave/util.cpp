@@ -9,8 +9,8 @@ namespace hpc{
     float dot_product(const std::vector<float> &p, const std::vector<float> &q) {
         float aux = 0;
         int length = int(p.size());
-        const float *a = &p[0];
-        const float *b = &q[0];
+        //const float *a = &p[0];
+        //const float *b = &q[0];
         int i = 0;
         /*for (; i < length - 8; i += 8) {
             __m256 va = _mm256_load_ps(a + i);
@@ -21,12 +21,12 @@ namespace hpc{
             __m128 m128_sum = _mm_add_ps(m128_low, m128_high);
             aux += _mm_cvtss_f32(m128_sum);
         }*/
-//        for (; i < length - 4; i += 4) {
-//            __m128 va = _mm_loadu_ps(a + i);
-//            __m128 vb = _mm_loadu_ps(b + i);
-//            __m128 dprot = _mm_dp_ps(va, vb, 0xf1);
-//            aux += _mm_cvtss_f32(dprot);
-//        }
+        /*for (; i < length - 4; i += 4) {
+            __m128 va = _mm_loadu_ps(a + i);
+            __m128 vb = _mm_loadu_ps(b + i);
+            __m128 dprot = _mm_dp_ps(va, vb, 0xf1);
+            aux += _mm_cvtss_f32(dprot);
+        }*/
         for (; i < length; i++) {
             aux += p[i] * q[i];
         }
@@ -108,8 +108,8 @@ namespace hpc{
     }
 
     std::vector<float> vector_sub(const std::vector<float> &p, const std::vector<float> &q) {
-        const float *a = &p[0];
-        const float *b = &q[0];
+        //const float *a = &p[0];
+        //const float *b = &q[0];
         int i = 0;
         int length = int(p.size());
         std::vector<float>res(length);

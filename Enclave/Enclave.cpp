@@ -39,6 +39,8 @@
 #include "ttruth.h"
 #include <queue>
 #include <cstring>
+#include "oblivious_primitive.h"
+#include "oblivious_ttruth.h"
 
 using namespace std;
 
@@ -216,12 +218,11 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 	// latent truth discovery
 	auto question_truth_indicator = latent_truth_model(question_observations);
 	/*for(int i=0;i<question_truth_indicator.size();i++) {
-		ocall_print_int_array(&question_truth_indicator[i][0], question_truth_indicator[i].size());
+	 ocall_print_int_array(&question_truth_indicator[i][0], question_truth_indicator[i].size());
 
-	}*/
+	 }*/
 	// decide the top_k_score of each question
 	// and score of each user
-
 	vector<double> user_score(user_num);
 
 	// calculate score of each usre and get the top_k_user of each question
@@ -244,7 +245,7 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		double total_score = std::accumulate(user_answer_score.begin(),
 				user_answer_score.end(), 0);
 		// normalize score for each answer
-		if (total_score == 0)
+		if (total_score < 1e-6)
 			throw "total score should not be 0";
 
 		for (int i = 0; i < user_num; i++) {
@@ -264,6 +265,285 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		vector<int> top_k_user(top_k);
 		for (int i = 0; i < top_k; i++) {
 			int user_index = q.top().second;
+			top_k_user[i] = user_index;
+		}
+		memcpy(question_top_k_user + question_id * top_k, &top_k_user[0],
+				top_k * sizeof(int));
+	}
+}
+
+void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
+		int user_num, int top_k, int cluster_size, int vector_size, int cnt) {
+
+	vector<vector<Observation>> question_observations(question_num);
+
+	ocall_print_string("truth discovery start in enclave\n");
+	vector<vector<Keyword>> question_keywords;
+	for (int question_id = 0; question_id < question_num; question_id++) {
+		vector<Observation> observations(user_num, Observation(cluster_size));
+		// load solutions for the question
+		std::vector<int> user_solution_size(user_num);
+
+		sgx_status_t ret = ocall_query_solution_size(question_id,
+				&user_solution_size[0], user_num);
+		if (ret != SGX_SUCCESS) {
+			throw "can not read solution size";
+		}
+		int total_solution_size = accumulate(user_solution_size.begin(),
+				user_solution_size.end(), 0);
+		char *solutions = new char[total_solution_size + 1];
+		//extra 1 to store NULL terminator
+		ret = ocall_load_question_solutions(question_id, solutions,
+				total_solution_size + 1);
+		if (ret != SGX_SUCCESS) {
+			throw "can not load solution for question";
+		}
+		vector<Answer> answers;
+		int sol_start_loc = 0;
+		for (int i = 0; i < user_num; i++) {
+			int sol_end_loc = sol_start_loc + user_solution_size[i];
+			if (user_solution_size[i] == 0) {
+				// dot not provide solution
+				continue;
+			} else {
+				string raw_answer(solutions + sol_start_loc,
+						user_solution_size[i]);
+				//ocall_print_string(("solution in sgx:"+raw_answer+"\n").c_str());
+				answers.emplace_back(i, question_id, std::move(raw_answer));
+			}
+			sol_start_loc = sol_end_loc;
+		}
+		delete[] solutions;
+
+		//prepare keywords
+		vector<Keyword> keywords;
+		for (auto &answer : answers) {
+			auto user_kws = answer.to_keywords();
+			for (auto &ukw : user_kws) {
+				//if(ukw.question_id == -1) throw "unexpected state";
+				keywords.push_back(std::move(ukw));
+			}
+		}
+		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
+		// insert oblivious part here
+		// pad keywords to same length
+		keywords_padding(keywords);
+		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
+
+
+		//for(auto &kw: keywords) {
+			//ocall_print_string((to_string(kw.content.size())+"\n").c_str());
+		//}
+		unordered_set<string> test_voc;
+		for(auto &kw:keywords) {
+			if(test_voc.count(kw.content)==0) {
+				test_voc.insert(kw.content);
+			}
+		}
+		//ocall_print_string((to_string(test_voc.size())+"\n").c_str());
+
+		// keywords space decide
+		auto padded_vocabulary = oblivious_vocabulary_decide(keywords);
+
+		// oblivious dummy words addition
+		const float epsilon = 3;
+		const float delta = -32;
+
+		//ocall_print_string((to_string(padded_vocabulary.size())+"\n").c_str());
+
+		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
+
+		oblivious_dummy_words_addition(padded_vocabulary, keywords, epsilon, delta);
+		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
+
+		// remove padding
+		keywords_remove_padding(keywords);
+
+		// filter keywords first;
+		// get unique keywords
+		unordered_set<string> voc;
+
+		for (auto &kw : keywords) {
+			if (voc.count(kw.content) == 0)
+				voc.insert(kw.content);
+		}
+
+		int word_num = voc.size();
+		vector<int> words_size;
+		int total_word_size = 0;
+		vector<string> words;
+		for (auto &e : voc) {
+			words_size.push_back(e.size());
+			total_word_size += e.size();
+			words.push_back(e);
+			//ocall_print_string((e+"\n").c_str());
+		}
+		char *raw_words = new char[total_word_size + 1];
+
+		// load words
+		int words_start_loc = 0;
+		for (int i = 0; i < word_num; i++) {
+			int words_end_loc = words_start_loc + words_size[i];
+			memcpy(raw_words + words_start_loc, words[i].c_str(),
+					words[i].size());
+			words_start_loc = words_end_loc;
+		}
+		if (words_start_loc != total_word_size) {
+			throw("word size incorrect");
+		}
+
+		raw_words[total_word_size] = '\0';
+		vector<int> words_filter_ind(word_num);
+		ret = ocall_filter_keywords(raw_words, &words_size[0],
+				&words_filter_ind[0], word_num);
+
+		if (ret != SGX_SUCCESS) {
+			throw "can not filter words";
+		}
+
+		// filter keywords use indicator
+		// record the size of words after filtering
+		unordered_set<string> to_remove_words;
+		words_start_loc = 0;
+		vector<int> filter_words_size;
+		int filter_words_total_size = 0;
+		for (int i = 0; i < word_num; i++) {
+			string word(raw_words + words_start_loc, words_size[i]);
+			if (words_filter_ind[i] == 0) {
+				filter_words_size.push_back(words_size[i]);
+				filter_words_total_size += words_size[i];
+			} else {
+				to_remove_words.insert(std::move(word));
+			}
+			words_start_loc += words_size[i];
+		}
+		// filter keywords
+		vector<Keyword> tmp;
+		for (auto &kw : keywords) {
+			if (to_remove_words.count(kw.content) == 0) {
+				tmp.push_back(std::move(kw));
+			}
+		}
+		keywords = std::move(tmp);
+		// get unique words after filtering
+		words_start_loc = 0;
+		int filter_word_num = 0;
+		int filter_words_start_loc = 0;
+		char *filtered_raw_words = new char[filter_words_total_size + 1];
+		filtered_raw_words[filter_words_total_size] = '\0';
+		for (int i = 0; i < word_num; i++) {
+			if (words_filter_ind[i] == 0) {
+				string word(raw_words + words_start_loc, words_size[i]);
+				memcpy(filtered_raw_words + filter_words_start_loc,
+						raw_words + words_start_loc, words_size[i]);
+				filter_words_start_loc += words_size[i];
+				filter_word_num += 1;
+			}
+			words_start_loc += words_size[i];
+		}
+
+		// load vectors for word
+		float *word_vectors = new float[filter_word_num * vector_size];
+		ret = ocall_load_words_vectors(filtered_raw_words,
+				&filter_words_size[0], word_vectors, filter_word_num,
+				filter_word_num * vector_size);
+		if (ret != SGX_SUCCESS) {
+			throw "can not load word vectors";
+		}
+		// build word model from words and raw_vectors;
+		unordered_map<string, WordVec> dic;
+		filter_words_start_loc = 0;
+		for (int i = 0; i < filter_word_num; i++) {
+			string word(filtered_raw_words + filter_words_start_loc,
+					filter_words_size[i]);
+			WordVec v(word_vectors + vector_size * i,
+					word_vectors + vector_size * (i + 1));
+			dic.emplace(std::move(word), std::move(v));
+			filter_words_start_loc += filter_words_size[i];
+		}
+		WordModel word_model(dic, vector_size);
+		delete[] filtered_raw_words;
+		delete[] raw_words;
+		delete[] word_vectors;
+
+		// clustering
+		oblivious_sphere_kmeans(keywords, word_model, cluster_size);
+
+		// remove dummy words
+		//shuffle to hide how many counts dummy for each word
+		keywords_padding(keywords);
+		oblivious_shuffle(keywords);
+		{
+			vector<Keyword> tmp;
+			for (auto &keyword : keywords) {
+				if (keyword.owner_id == -1)
+					continue;
+				tmp.push_back(std::move(keyword));
+			}
+			keywords = std::move(tmp);
+		}
+		keywords_remove_padding(keywords);
+		// update observation
+		oblivious_observation_update(observations, keywords);
+
+		question_keywords.push_back(std::move(keywords));
+
+		question_observations[question_id] = std::move(observations);
+
+	}
+
+	// latent truth discovery
+	auto question_truth_indicator = oblivious_latent_truth_model(question_observations);
+	/*for(int i=0;i<question_truth_indicator.size();i++) {
+	 ocall_print_int_array(&question_truth_indicator[i][0], question_truth_indicator[i].size());
+
+	 }*/
+	// decide the top_k_score of each question
+	// and score of each user
+	vector<double> user_score(user_num);
+
+	// calculate score of each usre and get the top_k_user of each question
+
+
+	for (int question_id = 0; question_id < question_num; question_id++) {
+		// calculate truth score of each answer
+		vector<double> user_answer_score(user_num);
+		for (auto &keyword : question_keywords[question_id]) {
+			int owner_id = keyword.owner_id;
+			int cluster_assignment = keyword.cluster_assignment;
+			auto &truth_indicator = question_truth_indicator[question_id];
+			int indicator = 0;
+			// obliviously get indicator
+			for(int k=0;k<truth_indicator.size();k++) {
+				int ind = truth_indicator[k];
+				indicator = oblivious_assign_CMOV(k==cluster_assignment,ind,indicator);
+			}
+
+			user_answer_score[owner_id] += 1 * (indicator == 1);
+		}
+		double total_score = std::accumulate(user_answer_score.begin(),
+				user_answer_score.end(), 0);
+		// normalize score for each answer
+		if (total_score == 0)
+			throw "total score should not be 0";
+
+		for (int i = 0; i < user_num; i++) {
+			auto &score = user_answer_score[i];
+			score /= total_score;
+			user_score[i] += score;
+		}
+
+		// decide the top_k score
+
+		vector<pair<double, int>> q;
+		for (int i = 0; i < user_num; i++) {
+			auto score = user_answer_score[i];
+			q.emplace_back(score, i);
+		}
+		oblivious_sort(q, 1);
+		vector<int> top_k_user(top_k);
+		for (int i = 0; i < top_k; i++) {
+			int user_index = q[i].second;
 			top_k_user[i] = user_index;
 		}
 		memcpy(question_top_k_user + question_id * top_k, &top_k_user[0],

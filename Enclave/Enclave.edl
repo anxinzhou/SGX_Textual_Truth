@@ -36,11 +36,11 @@ enclave {
 
     trusted {
     	public void ecall_ttruth([out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt);
+    	public void ecall_oblivious_ttruth([out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt);
     	public void test();
     };
 
     untrusted {
-    	void ocall_load_question_solutions_v2()
     	void ocall_query_solution_size(int question_id,[out,count=user_num]int *user_solution_size, int user_num);
     	void ocall_load_question_solutions(int question_id, [out,count=len] char* solutions, int len);
     	void ocall_load_words_vectors([in,string]char *raw_words, [in, count=word_num]int *words_size,[out,count=vec_len]float* vectors, int word_num, int vec_len);
