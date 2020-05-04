@@ -34,9 +34,11 @@ enclave {
 	
 	// Import the Ocalls for trusted mutex
 
+       from "sgx_pthread.edl" import *;
+       from "sgx_tstdc.edl" import *;
     trusted {
-    	public void ecall_ttruth([out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt);
-    	public void ecall_oblivious_ttruth([out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt);
+    	public void ecall_ttruth([user_check]char **question_solutions,[user_check]int **question_user_sol_size,[user_check]float **question_vecs,[out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt);
+    	public void ecall_oblivious_ttruth([user_check]char **question_solutions,[user_check]int **question_user_sol_size,[user_check]float **question_vecs,[out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt, double epsilon, double delta);
     	public void test();
     };
 
@@ -44,7 +46,9 @@ enclave {
     	void ocall_query_solution_size(int question_id,[out,count=user_num]int *user_solution_size, int user_num);
     	void ocall_load_question_solutions(int question_id, [out,count=len] char* solutions, int len);
     	void ocall_load_words_vectors([in,string]char *raw_words, [in, count=word_num]int *words_size,[out,count=vec_len]float* vectors, int word_num, int vec_len);
-    	void ocall_filter_keywords([in, string]char * raw_words, [in, count=word_num] int* words_size, [out,count=word_num] int *words_filter_ind, int word_num);
+    	void ocall_load_words_vectors_batch([in,count=w_len]char *raw_words, [in, count=word_num]int *words_size,[out,count=vec_len]float* vectors, int word_num, int vec_len,int w_len);
+    	void ocall_load_words_vectors2(int question_id,[in,string]char *raw_words, [in, count=word_num]int *words_size, int word_num);
+    	void ocall_filter_keywords(int question_id,[in, string]char * raw_words, [in, count=word_num] int* words_size, [out,count=word_num] int *words_filter_ind, int word_num);
 		void ocall_print_string([in, string] const char *string);
 		void ocall_print_float_array([in, count=len] float *arr,int len);
 		void ocall_print_int_array([in, count=len] int *arr, int len);

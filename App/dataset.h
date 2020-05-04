@@ -20,9 +20,10 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include "boost/filesystem.hpp"
 
+extern unordered_set<string> words_filter;
+
 class AnswerGradingData {
 public:
-    static unordered_set<string> words_filter;
     vector<Question> questions;
     vector<vector<Answer>> answers;
     vector<vector<float>> scores;
@@ -42,6 +43,17 @@ private:
 
     void load_scores(const string &score_file_path);
 };
+
+class SimulateData {
+public:
+
+	vector<vector<Answer>> answers;
+	static const int key_factor_number;
+	explicit SimulateData(int worker_num, int question_num, int answer_word_num, vector<string> &words_space);
+	explicit SimulateData(int worker_num, int question_num, int answer_word_num, int answer_keyword_num,vector<string> &keywords_space, vector<string>&fake_words_space);
+};
+
+
 
 #endif //TEXTTRUTH_DATASET_H
 

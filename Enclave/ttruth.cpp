@@ -347,6 +347,7 @@ vector<int> weighted_sphere_kmeans(vector<string> &kws, vector<int> weight,
 	for (int t=0; t < max_iter; t++) {
 		// e step
 		// assign new cluster
+
 		for (int i = 0; i < kws.size(); i++) {
 
 			float max_prob = INT_MIN;
@@ -382,9 +383,11 @@ vector<int> weighted_sphere_kmeans(vector<string> &kws, vector<int> weight,
 				continue; //
 			hpc::vector_mul_inplace(mu, 1.0 / mu_l2);
 		}
+
+		// comment check tol for benchmark
 		// check stop tol
 		double cur_tol = 0;
-		for (int i = 0; i < cluster_num; i++) {
+		/*for (int i = 0; i < cluster_num; i++) {
 			WordVec diff = hpc::vector_sub(new_clusters[i], clusters[i]);
 			double square_norm = sqrt(hpc::dot_product(diff, diff));
 			cur_tol += square_norm;
@@ -393,16 +396,16 @@ vector<int> weighted_sphere_kmeans(vector<string> &kws, vector<int> weight,
 		if (cur_tol < tol) {
 			//            cout << "sphere clustering converge at iteration " << t << endl;
 			break;
-		}
+		} */
 
 		//set new cluster
 		for (int i = 0; i < cluster_num; i++) {
 			clusters[i] = std::move(new_clusters[i]);
 		}
-
-		if (t==max_iter-1) {
+		// comment for benchmark
+		/*if (t==max_iter-1) {
 			ocall_print_string("kmeans early quit without converge\n");
-		}
+		}*/
 	}
 
 	// see how many words each cluster have
@@ -493,4 +496,93 @@ vector<WordVec> weighted_kmeans_init(vector<string> &kws, vector<int> weight,
 	}
 	return clusters;
 
+}
+
+vector<int> parallel_weighted_sphere_kmeans(vector<string> &kws, vector<int> weight,
+		WordModel &word_model, int cluster_num, int max_iter, double tol) {
+	int dimension = 0;
+	vector<int> cluster_assignment(kws.size());
+	dimension = word_model.dimension;
+
+	// init with kmeans ++
+	vector<WordVec> clusters = weighted_kmeans_init(kws, weight, word_model,
+			cluster_num);
+
+	vector<const WordVec*> keyword_vec;
+	keyword_vec.reserve(kws.size());
+
+	for (int i = 0; i < kws.size(); i++) {
+		auto vec = &word_model.get_vec(kws[i]);
+		//ocall_print_float_array(&vec[0],vec.size());
+		if (vec->size() != word_model.dimension) {
+			throw "wrong dimension";
+		}
+		keyword_vec.push_back(vec);
+	}
+
+	for (int t=0; t < max_iter; t++) {
+		// e step
+		// assign new cluster
+		#pragma omp parallel for
+		for (int i = 0; i < kws.size(); i++) {
+
+			float max_prob = INT_MIN;
+			int max_index = -1;
+			for (int k = 0; k < clusters.size(); k++) {
+				float prob = hpc::dot_product(clusters[k], *keyword_vec[i]);
+
+				if (prob > max_prob) {
+					max_prob = prob;
+					max_index = k;
+				}
+			}
+			cluster_assignment[i] = max_index;
+		}
+		// M step
+		// update parameters
+		vector<WordVec> new_clusters(cluster_num, WordVec(dimension, 0));
+		#pragma omp parallel for
+		for (int i = 0; i < kws.size(); i++) {
+			auto &keyword = kws[i];
+			int cluster_ind = cluster_assignment[i];
+			auto &new_cluster = new_clusters[cluster_ind];
+			auto &kv = *keyword_vec[i];
+			for (int k = 0; k < kv.size(); k++) {
+				new_cluster[k] += 3 * kv[k];
+			}
+		}
+
+		//normalize mu
+		#pragma omp parallel for
+		for (int i = 0; i < cluster_num; i++) {
+			auto &mu = new_clusters[i];
+			float mu_l2 = sqrt(hpc::dot_product(mu, mu));
+			if (mu_l2 < 1e-8)
+				continue; //
+			hpc::vector_mul_inplace(mu, 1.0 / mu_l2);
+		}
+
+		// comment check tol for benchmark
+		// check stop tol
+		double cur_tol = 0;
+		/*for (int i = 0; i < cluster_num; i++) {
+			WordVec diff = hpc::vector_sub(new_clusters[i], clusters[i]);
+			double square_norm = sqrt(hpc::dot_product(diff, diff));
+			cur_tol += square_norm;
+		}
+
+		if (cur_tol < tol) {
+			//            cout << "sphere clustering converge at iteration " << t << endl;
+			break;
+		} */
+
+		//set new cluster
+		#pragma omp parallel for
+		for (int i = 0; i < cluster_num; i++) {
+			clusters[i] = std::move(new_clusters[i]);
+		}
+
+	}
+
+	return cluster_assignment;
 }

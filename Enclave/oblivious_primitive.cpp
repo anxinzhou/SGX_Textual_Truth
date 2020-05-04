@@ -168,6 +168,7 @@ void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction, function<b
     //sort
 //    cout<<arr.size()<<endl;
     for (int j = 2; j <= arr.size(); j *= 2) {
+		#pragma omp parallel for
         for (int i = 0; i < arr.size(); i += j) {         // can use openmp accelerate this part
             __oblivious_bitonic_sort(arr, i, i + j, (i / j % 2) ^ sort_direction, cmp);
         }

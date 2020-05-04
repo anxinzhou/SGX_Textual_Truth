@@ -41,35 +41,37 @@
 #include <cstring>
 #include "oblivious_primitive.h"
 #include "oblivious_ttruth.h"
+#include <omp.h>
+
+const int THREAD_NUM = 8;
 
 using namespace std;
 
-void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
-		int top_k, int cluster_size, int vector_size, int cnt) {
+void ecall_ttruth(char **question_solutions, int **question_user_sol_size,
+		float **question_vecs, int *question_top_k_user, int question_num,
+		int user_num, int top_k, int cluster_size, int vector_size, int cnt) {
+	omp_set_dynamic(0);     // Explicitly disable dynamic teams
+	omp_set_num_threads(THREAD_NUM); // Use 4 threads for all consecutive parallel regions
 
 	vector<vector<Observation>> question_observations(question_num);
 
-	ocall_print_string("truth discovery start in enclave\n");
-	vector<vector<Keyword>> question_keywords;
+	//ocall_print_string("truth discovery start in enclave\n");
+	vector<vector<Keyword>> question_keywords(question_num);
+	// parallel question id for large question num
+	//#pragma omp parallel for
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		vector<Observation> observations(user_num, Observation(cluster_size));
 		// load solutions for the question
-		std::vector<int> user_solution_size(user_num);
+		int *user_solution_size = question_user_sol_size[question_id];
 
-		sgx_status_t ret = ocall_query_solution_size(question_id,
-				&user_solution_size[0], user_num);
-		if (ret != SGX_SUCCESS) {
-			throw "can not read solution size";
+		int total_solution_size = 0;
+		for (int i = 0; i < user_num; i++) {
+			total_solution_size += user_solution_size[i];
 		}
-		int total_solution_size = accumulate(user_solution_size.begin(),
-				user_solution_size.end(), 0);
-		char *solutions = new char[total_solution_size + 1];
+
+		char *solutions = question_solutions[question_id];
 		//extra 1 to store NULL terminator
-		ret = ocall_load_question_solutions(question_id, solutions,
-				total_solution_size + 1);
-		if (ret != SGX_SUCCESS) {
-			throw "can not load solution for question";
-		}
+
 		vector<Answer> answers;
 		int sol_start_loc = 0;
 		for (int i = 0; i < user_num; i++) {
@@ -85,19 +87,17 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 			}
 			sol_start_loc = sol_end_loc;
 		}
-		delete[] solutions;
 
 		//prepare keywords
 		vector<Keyword> keywords;
 		for (auto &answer : answers) {
 			auto user_kws = answer.to_keywords();
 			for (auto &ukw : user_kws) {
+				//if(ukw.question_id == -1) throw "unexpected state";
 				keywords.push_back(std::move(ukw));
 			}
 		}
 
-		// filter keywords first;
-		// get unique keywords
 		unordered_set<string> voc;
 
 		for (auto &kw : keywords) {
@@ -131,8 +131,8 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 
 		raw_words[total_word_size] = '\0';
 		vector<int> words_filter_ind(word_num);
-		ret = ocall_filter_keywords(raw_words, &words_size[0],
-				&words_filter_ind[0], word_num);
+		sgx_status_t ret = ocall_filter_keywords(question_id, raw_words,
+				&words_size[0], &words_filter_ind[0], word_num);
 
 		if (ret != SGX_SUCCESS) {
 			throw "can not filter words";
@@ -142,18 +142,17 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		// record the size of words after filtering
 		unordered_set<string> to_remove_words;
 		words_start_loc = 0;
-		vector<int> filter_words_size;
-		int filter_words_total_size = 0;
+		vector<string> after_filter_words;
 		for (int i = 0; i < word_num; i++) {
 			string word(raw_words + words_start_loc, words_size[i]);
 			if (words_filter_ind[i] == 0) {
-				filter_words_size.push_back(words_size[i]);
-				filter_words_total_size += words_size[i];
+				after_filter_words.push_back(std::move(word));
 			} else {
 				to_remove_words.insert(std::move(word));
 			}
 			words_start_loc += words_size[i];
 		}
+		delete[] raw_words;
 		// filter keywords
 		vector<Keyword> tmp;
 		for (auto &kw : keywords) {
@@ -164,44 +163,19 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		keywords = std::move(tmp);
 		// get unique words after filtering
 		words_start_loc = 0;
-		int filter_word_num = 0;
-		int filter_words_start_loc = 0;
-		char *filtered_raw_words = new char[filter_words_total_size + 1];
-		filtered_raw_words[filter_words_total_size] = '\0';
-		for (int i = 0; i < word_num; i++) {
-			if (words_filter_ind[i] == 0) {
-				//string word(raw_words + words_start_loc, words_size[i]);
-				memcpy(filtered_raw_words + filter_words_start_loc,
-						raw_words + words_start_loc, words_size[i]);
-				filter_words_start_loc += words_size[i];
-				filter_word_num += 1;
-			}
-			words_start_loc += words_size[i];
-		}
 
-		// load vectors for word
-		float *word_vectors = new float[filter_word_num * vector_size];
-		ret = ocall_load_words_vectors(filtered_raw_words,
-				&filter_words_size[0], word_vectors, filter_word_num,
-				filter_word_num * vector_size);
-		if (ret != SGX_SUCCESS) {
-			throw "can not load word vectors";
-		}
-		// build word model from words and raw_vectors;
+		float *word_vectors = question_vecs[question_id];
+
 		unordered_map<string, WordVec> dic;
-		filter_words_start_loc = 0;
-		for (int i = 0; i < filter_word_num; i++) {
-			string word(filtered_raw_words + filter_words_start_loc,
-					filter_words_size[i]);
+		for (int i = 0; i < after_filter_words.size(); i++) {
+			auto &word = after_filter_words[i];
 			WordVec v(word_vectors + vector_size * i,
 					word_vectors + vector_size * (i + 1));
 			dic.emplace(std::move(word), std::move(v));
-			filter_words_start_loc += filter_words_size[i];
+
 		}
+
 		WordModel word_model(dic, vector_size);
-		delete[] filtered_raw_words;
-		delete[] raw_words;
-		delete[] word_vectors;
 
 		// clustering
 		// prepare weighted words
@@ -215,7 +189,7 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 			kws.push_back(std::move(p.first));
 			weight.push_back(p.second);
 		}
-		auto cluster_assignment = weighted_sphere_kmeans(kws, weight,
+		auto cluster_assignment = parallel_weighted_sphere_kmeans(kws, weight,
 				word_model, cluster_size);
 		unordered_map<string, int> kw_cluster_ind;
 		for (int i = 0; i < kws.size(); i++) {
@@ -232,7 +206,7 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 		// update observation
 		observation_update(observations, keywords);
 
-		question_keywords.push_back(std::move(keywords));
+		question_keywords[question_id] = std::move(keywords);
 
 		question_observations[question_id] = std::move(observations);
 
@@ -253,6 +227,8 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 	auto score_cmp = [](pair<double, int> &a, pair<double, int> &b) {
 		return a.first < b.first;
 	};
+	// parallel question id for large question num
+	#pragma omp parallel for
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		// calculate truth score of each answer
 		vector<double> user_answer_score(user_num);
@@ -296,32 +272,32 @@ void ecall_ttruth(int *question_top_k_user, int question_num, int user_num,
 	}
 }
 
-void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
-		int user_num, int top_k, int cluster_size, int vector_size, int cnt) {
-
+void ecall_oblivious_ttruth(char **question_solutions,
+		int **question_user_sol_size, float **question_vecs,
+		int *question_top_k_user, int question_num, int user_num, int top_k,
+		int cluster_size, int vector_size, int cnt, double epsilon,
+		double delta) {
+	omp_set_dynamic(0);     // Explicitly disable dynamic teams
+	omp_set_num_threads(THREAD_NUM); // Use 4 threads for all consecutive parallel regions
 	vector<vector<Observation>> question_observations(question_num);
 
-	ocall_print_string("truth discovery start in enclave\n");
-	vector<vector<Keyword>> question_keywords;
+	//ocall_print_string("truth discovery start in enclave\n");
+	vector<vector<Keyword>> question_keywords(question_num);
+	// parallel question id for large question num
+	//#pragma omp parallel for
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		vector<Observation> observations(user_num, Observation(cluster_size));
 		// load solutions for the question
-		std::vector<int> user_solution_size(user_num);
+		int *user_solution_size = question_user_sol_size[question_id];
 
-		sgx_status_t ret = ocall_query_solution_size(question_id,
-				&user_solution_size[0], user_num);
-		if (ret != SGX_SUCCESS) {
-			throw "can not read solution size";
+		int total_solution_size = 0;
+		for (int i = 0; i < user_num; i++) {
+			total_solution_size += user_solution_size[i];
 		}
-		int total_solution_size = accumulate(user_solution_size.begin(),
-				user_solution_size.end(), 0);
-		char *solutions = new char[total_solution_size + 1];
+
+		char *solutions = question_solutions[question_id];
 		//extra 1 to store NULL terminator
-		ret = ocall_load_question_solutions(question_id, solutions,
-				total_solution_size + 1);
-		if (ret != SGX_SUCCESS) {
-			throw "can not load solution for question";
-		}
+		memcpy(solutions, question_solutions[question_id], total_solution_size);
 		vector<Answer> answers;
 		int sol_start_loc = 0;
 		for (int i = 0; i < user_num; i++) {
@@ -337,7 +313,6 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 			}
 			sol_start_loc = sol_end_loc;
 		}
-		delete[] solutions;
 
 		//prepare keywords
 		vector<Keyword> keywords;
@@ -369,8 +344,6 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		auto padded_vocabulary = oblivious_vocabulary_decide(keywords);
 
 		// oblivious dummy words addition
-		const float epsilon = 3;
-		const float delta = -32;
 
 		//ocall_print_string((to_string(padded_vocabulary.size())+"\n").c_str());
 
@@ -418,8 +391,8 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 
 		raw_words[total_word_size] = '\0';
 		vector<int> words_filter_ind(word_num);
-		ret = ocall_filter_keywords(raw_words, &words_size[0],
-				&words_filter_ind[0], word_num);
+		sgx_status_t ret = ocall_filter_keywords(question_id, raw_words,
+				&words_size[0], &words_filter_ind[0], word_num);
 
 		if (ret != SGX_SUCCESS) {
 			throw "can not filter words";
@@ -429,18 +402,17 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		// record the size of words after filtering
 		unordered_set<string> to_remove_words;
 		words_start_loc = 0;
-		vector<int> filter_words_size;
-		int filter_words_total_size = 0;
+		vector<string> after_filter_words;
 		for (int i = 0; i < word_num; i++) {
 			string word(raw_words + words_start_loc, words_size[i]);
 			if (words_filter_ind[i] == 0) {
-				filter_words_size.push_back(words_size[i]);
-				filter_words_total_size += words_size[i];
+				after_filter_words.push_back(std::move(word));
 			} else {
 				to_remove_words.insert(std::move(word));
 			}
 			words_start_loc += words_size[i];
 		}
+		delete[] raw_words;
 		// filter keywords
 		vector<Keyword> tmp;
 		for (auto &kw : keywords) {
@@ -451,53 +423,28 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		keywords = std::move(tmp);
 		// get unique words after filtering
 		words_start_loc = 0;
-		int filter_word_num = 0;
-		int filter_words_start_loc = 0;
-		char *filtered_raw_words = new char[filter_words_total_size + 1];
-		filtered_raw_words[filter_words_total_size] = '\0';
-		for (int i = 0; i < word_num; i++) {
-			if (words_filter_ind[i] == 0) {
-				//string word(raw_words + words_start_loc, words_size[i]);
-				memcpy(filtered_raw_words + filter_words_start_loc,
-						raw_words + words_start_loc, words_size[i]);
-				filter_words_start_loc += words_size[i];
-				filter_word_num += 1;
-			}
-			words_start_loc += words_size[i];
-		}
 
-		// load vectors for word
-		float *word_vectors = new float[filter_word_num * vector_size];
-		ret = ocall_load_words_vectors(filtered_raw_words,
-				&filter_words_size[0], word_vectors, filter_word_num,
-				filter_word_num * vector_size);
-		if (ret != SGX_SUCCESS) {
-			throw "can not load word vectors";
-		}
-		// build word model from words and raw_vectors;
+		float *word_vectors = question_vecs[question_id];
+
 		unordered_map<string, WordVec> dic;
-		filter_words_start_loc = 0;
-		for (int i = 0; i < filter_word_num; i++) {
-			string word(filtered_raw_words + filter_words_start_loc,
-					filter_words_size[i]);
+		for (int i = 0; i < after_filter_words.size(); i++) {
+			auto &word = after_filter_words[i];
 			WordVec v(word_vectors + vector_size * i,
 					word_vectors + vector_size * (i + 1));
 			dic.emplace(std::move(word), std::move(v));
-			filter_words_start_loc += filter_words_size[i];
+
 		}
+
 		WordModel word_model(dic, vector_size);
-		delete[] filtered_raw_words;
-		delete[] raw_words;
-		delete[] word_vectors;
 
 		// clustering
 		// prepare weighted words
 		unordered_map<string, int> kw_counter;
 		for (auto &kw : keywords) {
-			if(kw_counter.count(kw.content) ==0) {
-				kw_counter[kw.content] = 1*(kw.owner_id != -1);
+			if (kw_counter.count(kw.content) == 0) {
+				kw_counter[kw.content] = 1 * (kw.owner_id != -1);
 			} else {
-				kw_counter[kw.content] += 1*(kw.owner_id != -1);
+				kw_counter[kw.content] += 1 * (kw.owner_id != -1);
 			}
 		}
 		vector<string> kws;
@@ -506,7 +453,7 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 			kws.push_back(std::move(p.first));
 			weight.push_back(p.second);
 		}
-		auto cluster_assignment = weighted_sphere_kmeans(kws, weight,
+		auto cluster_assignment = parallel_weighted_sphere_kmeans(kws, weight,
 				word_model, cluster_size);
 		unordered_map<string, int> kw_cluster_ind;
 		for (int i = 0; i < kws.size(); i++) {
@@ -537,7 +484,7 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 		// update observation
 		oblivious_observation_update(observations, keywords);
 
-		question_keywords.push_back(std::move(keywords));
+		question_keywords[question_id] = std::move(keywords);
 
 		question_observations[question_id] = std::move(observations);
 
@@ -555,7 +502,7 @@ void ecall_oblivious_ttruth(int *question_top_k_user, int question_num,
 	vector<double> user_score(user_num);
 
 	// calculate score of each usre and get the top_k_user of each question
-
+	#pragma omp parallel for
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		// calculate truth score of each answer
 		vector<double> user_answer_score(user_num);

@@ -132,7 +132,7 @@ namespace hpc{
         return res;
     }
 
-    bool vector_cmpeq(std::vector<int> &p, std::vector<int> &q) {
+    /*bool vector_cmpeq(std::vector<int> &p, std::vector<int> &q) {
         int *a = &p[0];
         int *b = &q[0];
         int i = 0;
@@ -151,6 +151,6 @@ namespace hpc{
             equal &= (p[i] == q[i]);
             if (!equal) return false;
         }
-        return true;
-    }
+        return true;*/
+    //}
 }
