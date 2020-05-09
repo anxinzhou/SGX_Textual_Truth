@@ -161,6 +161,7 @@ void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction, function<b
     int to_pad_size = pow(2, level) - arr.size();
     Keyword dummy(arr[myRand::myrand_int() % arr.size()]);
     dummy.question_id = -1;
+    dummy.content="";
     for (int i = 0; i < to_pad_size; i++) {
         arr.push_back(dummy);
     }

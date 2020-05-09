@@ -47,6 +47,7 @@
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/unordered_set.hpp>
+
 //#include <omp.h>
 #include <chrono>
 //#include <omp.h>
@@ -740,7 +741,7 @@ int main(int argc, char *argv[]) {
 //
 //	return 0;
 
-	bool oblivious = false;
+	bool oblivious = true;
 	int top_k = 10;
 
 	// test texttruth performance
@@ -753,7 +754,7 @@ int main(int argc, char *argv[]) {
 	for (int i = 1; i <= 8; i++) {
 		num_questions.push_back(i * 1000);
 	}
-	for (int i = 8; i > 0; i--) {
+	for (int i = 2; i > 0; i--) {
 		num_workers.push_back(i * 300);
 	}
 

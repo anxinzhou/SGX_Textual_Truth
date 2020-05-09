@@ -95,8 +95,7 @@ endif
 
 
 App_Cpp_Flags := $(App_C_Flags) -mavx -msse2 -mavx2
-App_Link_Flags := -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lboost_serialization -lboost_filesystem -lboost_system  \
--lpthread -lgomp 
+App_Link_Flags := -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lboost_serialization -lpthread -lgomp -lboost_system -lboost_filesystem
 
 App_Cpp_Objects := $(App_Cpp_Files:.cpp=.o)
 
@@ -124,7 +123,7 @@ endif
 Crypto_Library_Name := sgx_tcrypto
 
 Enclave_Cpp_Files := Enclave/Enclave.cpp $(wildcard Enclave/*.cpp)
-Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/libcxx -I$(SGX_SDK)/include/tlibc -I/usr/lib/gcc/x86_64-linux-gnu/7/include
+Enclave_Include_Paths := -I/usr/local/include -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/libcxx -I$(SGX_SDK)/include/tlibc -I/usr/lib/gcc/x86_64-linux-gnu/7/include
 
 
 Enclave_C_Flags := -nostdinc -ffreestanding -fvisibility=hidden -fpie  -fstack-protector $(Enclave_Include_Paths) 
