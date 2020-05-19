@@ -430,6 +430,7 @@ vector<WordVec> weighted_kmeans_init(vector<string> &kws, vector<int> weight,
 	keyword_vec.reserve(kws.size());
 
 	for (int i = 0; i < kws.size(); i++) {
+		//ocall_print_string((kws[i]+"\n").c_str());
 		auto vec = &word_model.get_vec(kws[i]);
 		//ocall_print_float_array(&vec[0],vec.size());
 		if (vec->size() != word_model.dimension) {

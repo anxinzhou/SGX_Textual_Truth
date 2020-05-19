@@ -51,6 +51,8 @@ public:
     string content;
     int shuffle_tag;
 
+    explicit Keyword()=default;
+
     explicit Keyword(int oid, int qid, const string &cnt) :
 		question_id(qid),
             owner_id(oid),

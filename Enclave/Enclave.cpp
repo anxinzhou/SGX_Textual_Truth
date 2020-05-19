@@ -380,7 +380,6 @@ void ecall_oblivious_ttruth(char **question_solutions,
 		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
 
 
-
 		// filter keywords first;
 		// get unique keywords
 		unordered_set<string> voc;
@@ -446,6 +445,20 @@ void ecall_oblivious_ttruth(char **question_solutions,
 			}
 		}
 		keywords = std::move(tmp);
+
+
+		// for test here
+//		keywords_padding(keywords);
+//		auto padded_vocabulary = oblivious_vocabulary_decide(keywords);
+//				// remove padding
+//		keywords_remove_padding(keywords);
+////		for(auto &kw:padded_vocabulary) {
+////			ocall_print_string((kw.content+"\n").c_str());
+////		}
+//		oblivious_dummy_words_addition(padded_vocabulary, keywords, epsilon,
+//						delta);
+//		keywords_remove_padding(keywords);
+
 		// get unique words after filtering
 		words_start_loc = 0;
 

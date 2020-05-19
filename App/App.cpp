@@ -768,10 +768,10 @@ int main(int argc, char *argv[]) {
 //
 //	return 0;
 	double delta = -32;
-	int worker_num = 24;
-	int question_num = 1000;
+	int worker_num = 10000;
+	int question_num = 1;
 	int word_num = 48;
-	vector<int> epsilons = {3};
+	vector<int> epsilons = {1,2,3};
 	for(int i=0; i<=1;i++) {
 		if(i==0) cout<<"This non oblivious version!!!"<<endl;
 		else if(i==1) cout<<"This oblivious version!!!"<<endl;

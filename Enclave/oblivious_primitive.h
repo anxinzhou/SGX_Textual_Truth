@@ -75,5 +75,5 @@ void keywords_remove_padding(vector<Keyword>& keywords);
 vector<Keyword> oblivious_vocabulary_decide(vector<Keyword>&keywords);
 
 double oblivious_dummy_words_addition(vector<Keyword> &padded_vocabulary, vector<Keyword> &keywords, float epsilon=3, float delta=-32);
-void oblivious_bitonic_sort2(vector<Keyword> &arr, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp);
+void oblivious_bitonic_sort2(vector<Keyword> &arr, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp, bool pure = false);
 #endif //TEXTTRUTH_OBLIVIOUS_PRIMITIVE_H
