@@ -47,6 +47,7 @@ void __oblivious_bitonic_sort(vector<pair<double, int>> &arr, int start_index, i
                               function<bool(pair<double, int> &a, pair<double, int> &b)> &cmp) {
     int ele = end_index - start_index;
     for (int j = ele; j >= 2; j /= 2) {
+		#pragma omp parallel for
         for (int k = start_index; k < end_index; k += j) {
             for (int i = k; i < k + j / 2; i++) {
                 oblivious_compare_and_swap(arr[i], arr[j / 2 + i], sort_direction, cmp);
@@ -106,15 +107,25 @@ string oblivious_assign_string(uint8_t pred, const string &a, const string &b) {
     return res;
 }
 
-void oblivious_assign_keyword(uint8_t pred, Keyword &dst, Keyword &t, Keyword &f) {
+void oblivious_assign_keyword(uint8_t pred, Keyword &dst, Keyword &t, Keyword &f, bool pure) {
     dst.shuffle_tag = oblivious_assign_CMOV(pred, t.shuffle_tag, f.shuffle_tag);
     dst.question_id = oblivious_assign_CMOV(pred, t.question_id, f.question_id);
     dst.cluster_assignment = oblivious_assign_CMOV(pred, t.cluster_assignment, f.cluster_assignment);
     dst.owner_id = oblivious_assign_CMOV(pred, t.owner_id, f.owner_id);
-    dst.content = oblivious_assign_string(pred, t.content, f.content);
+    // only swap pointer is enough for our case
+    // simulate swap pointer
+    if(!pure) {
+    	if(pred) {
+    	    	std::swap(dst.content, t.content);
+    	    } else {
+    	    	std::swap(dst.content, f.content);
+    	    }
+    } else {
+    	dst.content = oblivious_assign_string(pred, t.content, f.content);
+    }
 }
 
-void oblivious_compare_and_swap(Keyword &a, Keyword &b, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp) {
+void oblivious_compare_and_swap(Keyword &a, Keyword &b, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp, bool pure) {
     // 0 ? a>b: a<b
     // not need to oblivious swap padding words for bitonic sort, assume the padded elements are always biggest, or smallest
     if(a.question_id == -1 && b.question_id == -1) return;
@@ -129,28 +140,30 @@ void oblivious_compare_and_swap(Keyword &a, Keyword &b, int sort_direction, func
         Keyword tmp(a);
 //        if(flag) std::swap(a,b);
 //
-        oblivious_assign_keyword(flag, a, b, a);
-        oblivious_assign_keyword(flag, b, tmp, b);
+        oblivious_assign_keyword(flag, a, b, a,pure);
+        oblivious_assign_keyword(flag, b, tmp, b, pure);
     }
 //    if(a.question_id == -1 && b.question_id == -1) return;
+
+
 
 
 }
 
 void __oblivious_bitonic_sort(vector<Keyword> &arr, int start_index, int end_index, int sort_direction,
-                              function<bool(Keyword &, Keyword &)> cmp) {
+                              function<bool(Keyword &, Keyword &)> cmp, bool pure) {
     int ele = end_index - start_index;
     for (int j = ele; j >= 2; j /= 2) {
         for (int k = start_index; k < end_index; k += j) {
             for (int i = k; i < k + j / 2; i++) {
-                oblivious_compare_and_swap(arr[i], arr[j / 2 + i], sort_direction, cmp);
+                oblivious_compare_and_swap(arr[i], arr[j / 2 + i], sort_direction, cmp, pure);
             }
         }
     }
 }
 
 
-void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp) {
+void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp,bool pure) {
     // pad with dummy to fit 2^n;
     int level = log2(arr.size());
     if (pow(2, level) != arr.size()) {
@@ -169,9 +182,9 @@ void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction, function<b
     //sort
 //    cout<<arr.size()<<endl;
     for (int j = 2; j <= arr.size(); j *= 2) {
-		#pragma omp parallel for
+		//#pragma omp parallel for
         for (int i = 0; i < arr.size(); i += j) {         // can use openmp accelerate this part
-            __oblivious_bitonic_sort(arr, i, i + j, (i / j % 2) ^ sort_direction, cmp);
+            __oblivious_bitonic_sort(arr, i, i + j, (i / j % 2) ^ sort_direction, cmp, pure);
         }
     }
 
@@ -185,11 +198,11 @@ void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction, function<b
 
 
 bool keyword_sort_compare(Keyword &a, Keyword &b) {
-    return a.content < b.content;
+    return a.content <= b.content;
 }
 
 bool keyword_shuffle_compare(Keyword &a, Keyword &b) {
-    return a.shuffle_tag < b.shuffle_tag;
+    return a.shuffle_tag <= b.shuffle_tag;
 }
 
 void oblivious_sort(vector<Keyword> &arr, int sort_direction) {
@@ -249,7 +262,7 @@ vector<Keyword> oblivious_vocabulary_decide(vector<Keyword> &keywords) {
 
     }
     //ocall_print_string(("test count:"+to_string(count)+"\n").c_str());
-    oblivious_bitonic_sort(keywords, 0, kw_shuffle_cmp);
+    oblivious_bitonic_sort(keywords, 0, kw_shuffle_cmp, true);
     // find the first position of 1
     int lo = 0;
     int hi = keywords.size();
@@ -350,4 +363,73 @@ double oblivious_dummy_words_addition(vector<Keyword> &padded_vocabulary, vector
     return overhead/true_words_size;
     // obliviou shuffle
 //    oblivious_shuffle(keywords);
+}
+
+// n>=2  and  n<=Integer.MAX_VALUE
+int greatestPowerOfTwoLessThan(int n)
+{
+	int k=1;
+	while (k>0 && k<n)
+		k=k<<1;
+	return k>>1;
+}
+
+void oblivious_assign_keyword2(uint8_t pred, Keyword &dst, Keyword &t, Keyword &f) {
+    dst.shuffle_tag = oblivious_assign_CMOV(pred, t.shuffle_tag, f.shuffle_tag);
+    dst.question_id = oblivious_assign_CMOV(pred, t.question_id, f.question_id);
+    dst.cluster_assignment = oblivious_assign_CMOV(pred, t.cluster_assignment, f.cluster_assignment);
+    dst.owner_id = oblivious_assign_CMOV(pred, t.owner_id, f.owner_id);
+    // only swap pointer is enough for our case
+    // simulate swap pointer
+    if(pred) {
+    	std::swap(dst.content, t.content);
+    } else {
+    	std::swap(dst.content, f.content);
+    }
+    //dst.content = oblivious_assign_string(pred, t.content, f.content);
+}
+
+
+void oblivious_compare_and_swap2(Keyword &a, Keyword &b, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp) {
+	// 0 ? a>b: a<b
+	// not need to oblivious swap padding words for bitonic sort, assume the padded elements are always biggest, or smallest
+		bool flag;
+		flag = sort_direction == !cmp(a, b);
+//        bool flag = sort_direction == 0 == !cmp(a, b);
+		Keyword tmp(a);
+//        if(flag) std::swap(a,b);
+		oblivious_assign_keyword2(flag, a, b, a);
+		oblivious_assign_keyword2(flag, b, tmp, b);
+}
+
+void bitonicMerge(vector<Keyword> &arr, int start_index, int end_index, int sort_direction,
+		  function<bool(Keyword &, Keyword &)> cmp)
+{
+	int n = end_index - start_index;
+	if (n>1)
+	{
+		int m=greatestPowerOfTwoLessThan(n);
+		for (int i=start_index; i<start_index+n-m; i++)
+			oblivious_compare_and_swap2(arr[i],arr[i+m],sort_direction,cmp);
+		bitonicMerge(arr,start_index, start_index+m, sort_direction,cmp);
+		bitonicMerge(arr,start_index+m, end_index, sort_direction,cmp);
+	}
+}
+
+void __oblivious_bitonic_sort2(vector<Keyword> &arr, int start_index, int end_index, int sort_direction,
+							  function<bool(Keyword &, Keyword &)> cmp) {
+
+	int n = end_index- start_index;
+	if (n>1)
+		{
+			int m=n/2;
+			__oblivious_bitonic_sort2(arr,start_index, m+start_index, !sort_direction,cmp);
+			__oblivious_bitonic_sort2(arr,start_index+m, end_index, sort_direction,cmp);
+			bitonicMerge(arr,start_index, end_index, sort_direction,cmp);
+		}
+}
+
+
+void oblivious_bitonic_sort2(vector<Keyword> &arr, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp) {
+	__oblivious_bitonic_sort2(arr,0,arr.size(),!sort_direction, cmp);
 }

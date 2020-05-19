@@ -43,6 +43,8 @@
 #include "oblivious_ttruth.h"
 #include <omp.h>
 
+
+const int CLOCKS_PER_SEC = 1000000;
 const int THREAD_NUM = 8;
 
 using namespace std;
@@ -58,7 +60,7 @@ void ecall_ttruth(char **question_solutions, int **question_user_sol_size,
 	//ocall_print_string("truth discovery start in enclave\n");
 	vector<vector<Keyword>> question_keywords(question_num);
 	// parallel question id for large question num
-	//#pragma omp parallel for
+	#pragma omp parallel for
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		vector<Observation> observations(user_num, Observation(cluster_size));
 		// load solutions for the question
@@ -214,10 +216,7 @@ void ecall_ttruth(char **question_solutions, int **question_user_sol_size,
 
 	// latent truth discovery
 	auto question_truth_indicator = latent_truth_model(question_observations);
-	/*for(int i=0;i<question_truth_indicator.size();i++) {
-	 ocall_print_int_array(&question_truth_indicator[i][0], question_truth_indicator[i].size());
 
-	 }*/
 	// decide the top_k_score of each question
 	// and score of each user
 	vector<double> user_score(user_num);
@@ -272,6 +271,32 @@ void ecall_ttruth(char **question_solutions, int **question_user_sol_size,
 	}
 }
 
+void ecall_test_ob_ltm(int question_num, int user_num, int k){
+	vector<vector<Observation>> question_observations(question_num,vector<Observation>(user_num,Observation(k)));
+	for(int i=0;i<question_num;i++) {
+		for(int j=0;j<user_num;j++) {
+			for(int q=0;q<k;q++) {
+				question_observations[i][j][q] = myRand::myrand_int()%2;
+			}
+		}
+	}
+	auto question_truth_indicator = oblivious_latent_truth_model(question_observations);
+
+}
+
+void ecall_test_nonob_ltm(int question_num, int user_num, int k) {
+	vector<vector<Observation>> question_observations(question_num,vector<Observation>(user_num,Observation(k)));
+		for(int i=0;i<question_num;i++) {
+			for(int j=0;j<user_num;j++) {
+				for(int q=0;q<k;q++) {
+					question_observations[i][j][q] = myRand::myrand_int()%2;
+				}
+			}
+		}
+	auto question_truth_indicator = latent_truth_model(question_observations);
+
+}
+
 void ecall_oblivious_ttruth(char **question_solutions,
 		int **question_user_sol_size, float **question_vecs,
 		int *question_top_k_user, int question_num, int user_num, int top_k,
@@ -284,7 +309,7 @@ void ecall_oblivious_ttruth(char **question_solutions,
 	//ocall_print_string("truth discovery start in enclave\n");
 	vector<vector<Keyword>> question_keywords(question_num);
 	// parallel question id for large question num
-	//#pragma omp parallel for
+	#pragma omp parallel for
 	for (int question_id = 0; question_id < question_num; question_id++) {
 		vector<Observation> observations(user_num, Observation(cluster_size));
 		// load solutions for the question
@@ -297,7 +322,7 @@ void ecall_oblivious_ttruth(char **question_solutions,
 
 		char *solutions = question_solutions[question_id];
 		//extra 1 to store NULL terminator
-		memcpy(solutions, question_solutions[question_id], total_solution_size);
+		//memcpy(solutions, question_solutions[question_id], total_solution_size);
 		vector<Answer> answers;
 		int sol_start_loc = 0;
 		for (int i = 0; i < user_num; i++) {
@@ -332,17 +357,18 @@ void ecall_oblivious_ttruth(char **question_solutions,
 		//for(auto &kw: keywords) {
 		//ocall_print_string((to_string(kw.content.size())+"\n").c_str());
 		//}
-		unordered_set<string> test_voc;
+		/*unordered_set<string> test_voc;
 		for (auto &kw : keywords) {
 			if (test_voc.count(kw.content) == 0) {
 				test_voc.insert(kw.content);
 			}
-		}
+		}*/
 		//ocall_print_string((to_string(test_voc.size())+"\n").c_str());
 
-		// keywords space decide
+		//keywords space decide
 		auto padded_vocabulary = oblivious_vocabulary_decide(keywords);
-
+		// remove padding
+		keywords_remove_padding(keywords);
 		// oblivious dummy words addition
 
 		//ocall_print_string((to_string(padded_vocabulary.size())+"\n").c_str());
@@ -353,8 +379,7 @@ void ecall_oblivious_ttruth(char **question_solutions,
 				delta);
 		//ocall_print_string((to_string(keywords.size())+"\n").c_str());
 
-		// remove padding
-		keywords_remove_padding(keywords);
+
 
 		// filter keywords first;
 		// get unique keywords
@@ -469,7 +494,7 @@ void ecall_oblivious_ttruth(char **question_solutions,
 
 		// remove dummy words
 		//shuffle to hide how many counts dummy for each word
-		keywords_padding(keywords);
+		//keywords_padding(keywords);
 		oblivious_shuffle(keywords);
 		{
 			vector<Keyword> tmp;
@@ -480,7 +505,7 @@ void ecall_oblivious_ttruth(char **question_solutions,
 			}
 			keywords = std::move(tmp);
 		}
-		keywords_remove_padding(keywords);
+		//keywords_remove_padding(keywords);
 		// update observation
 		oblivious_observation_update(observations, keywords);
 
@@ -493,10 +518,7 @@ void ecall_oblivious_ttruth(char **question_solutions,
 	// latent truth discovery
 	auto question_truth_indicator = oblivious_latent_truth_model(
 			question_observations);
-	/*for(int i=0;i<question_truth_indicator.size();i++) {
-	 ocall_print_int_array(&question_truth_indicator[i][0], question_truth_indicator[i].size());
 
-	 }*/
 	// decide the top_k_score of each question
 	// and score of each user
 	vector<double> user_score(user_num);
@@ -547,7 +569,9 @@ void ecall_oblivious_ttruth(char **question_solutions,
 		}
 		memcpy(question_top_k_user + question_id * top_k, &top_k_user[0],
 				top_k * sizeof(int));
+
 	}
+
 }
 
 void test() {

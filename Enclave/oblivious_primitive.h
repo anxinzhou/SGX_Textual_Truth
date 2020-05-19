@@ -59,11 +59,11 @@ void oblivious_bitonic_sort(vector<uint32_t > &arr, int sort_direction);
 
 
 // offer less operator for cmp
-void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction,function<bool(Keyword&,Keyword&)> &cmp);
+void oblivious_bitonic_sort(vector<Keyword> &arr, int sort_direction,function<bool(Keyword&,Keyword&)> &cmp,bool pure = false);
 
 string oblivious_assign_string(uint8_t pred, const string &a, const string&b);
 
-void oblivious_assign_keyword(uint8_t pred, Keyword &dst, Keyword &t, Keyword &f);
+//void oblivious_assign_keyword(uint8_t pred, Keyword &dst, Keyword &t, Keyword &f, bool pure);
 
 void oblivious_sort(vector<Keyword> &arr, int sort_direction);
 void oblivious_sort(vector<pair<double, int>> &arr, int sort_direction);
@@ -75,4 +75,5 @@ void keywords_remove_padding(vector<Keyword>& keywords);
 vector<Keyword> oblivious_vocabulary_decide(vector<Keyword>&keywords);
 
 double oblivious_dummy_words_addition(vector<Keyword> &padded_vocabulary, vector<Keyword> &keywords, float epsilon=3, float delta=-32);
+void oblivious_bitonic_sort2(vector<Keyword> &arr, int sort_direction, function<bool(Keyword &, Keyword &)> &cmp);
 #endif //TEXTTRUTH_OBLIVIOUS_PRIMITIVE_H

@@ -40,6 +40,8 @@ enclave {
     	public void ecall_ttruth([user_check]char **question_solutions,[user_check]int **question_user_sol_size,[user_check]float **question_vecs,[out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt);
     	public void ecall_oblivious_ttruth([user_check]char **question_solutions,[user_check]int **question_user_sol_size,[user_check]float **question_vecs,[out, count=cnt]int* question_top_k_user,int question_num,int user_num, int top_k, int cluster_size,int vector_size, int cnt, double epsilon, double delta);
     	public void test();
+    	public void ecall_test_ob_ltm(int question_num, int user_num, int k);
+    	public void ecall_test_nonob_ltm(int question_num, int user_num, int k);
     };
 
     untrusted {
@@ -52,5 +54,6 @@ enclave {
 		void ocall_print_string([in, string] const char *string);
 		void ocall_print_float_array([in, count=len] float *arr,int len);
 		void ocall_print_int_array([in, count=len] int *arr, int len);
+		void ocall_get_time([out,count=1]unsigned long int* t);
     };
 };

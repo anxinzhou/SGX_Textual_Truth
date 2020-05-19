@@ -139,6 +139,10 @@ void ocall_load_question_solutions(int question_id, char *solutions, int len) {
 	strcpy(solutions, question_solutions[question_id]);
 }
 
+void ocall_get_time(unsigned long int* t){
+	*t= clock();
+}
+
 void ocall_filter_keywords(int question_id, char *raw_words, int *words_size,
 		int *words_filter_ind, int word_num) {
 	int dimension = word_model.dimension;
@@ -414,7 +418,7 @@ void test_texttruth_topk_score(bool oblivious = false, int top_k = 10, double ep
 }
 
 void test_texttruth_performance(bool oblivious, int worker_num,
-		int question_num, int answer_word_num, double kw_vs_kwvoc_ratio = 19,
+		int question_num, int answer_word_num, double epsilon=3, double delta=-32,double kw_vs_kwvoc_ratio = 19,
 		double words_vs_voc_ratio = 3.93, double words_vs_kw_ratio = 5.66) {
 	const string model_path = "wordvec/glove27B100d";
 	auto start = high_resolution_clock::now();
@@ -505,8 +509,8 @@ void test_texttruth_performance(bool oblivious, int worker_num,
 
 	// benchmark texttruth
 	const int top_k = 1;
-	const double epsilon = 3;
-	const double delta = -32;
+//	const double epsilon = 3;
+//	const double delta = -32;
 	//cout << "top " << top_k << endl;
 	int *question_top_k_user = new int[question_num * top_k];
 	start = high_resolution_clock::now();
@@ -699,6 +703,29 @@ void test_texttruth_dp_overhead(bool oblivious = false) {
 	delete[] question_user_sol_size;
 }
 
+void test_ob_ltm(){
+	int k = 30;
+	int user_num = 20;
+	int question_num = 20000;
+	auto start = high_resolution_clock::now();
+	//ecall_test_ob_ltm(global_eid,question_num,user_num,k);
+	ecall_test_nonob_ltm(global_eid,question_num,user_num,k);
+	auto stop = high_resolution_clock::now();
+	auto duration = duration_cast<microseconds>(stop - start);
+
+	std::cout << "nonob ltm time "
+			<< (double) duration.count() / 1000000.0 << "s" << endl;
+
+	start = high_resolution_clock::now();
+	ecall_test_ob_ltm(global_eid,question_num,user_num,k);
+	//ecall_test_nonob_ltm(global_eid,question_num,user_num,k);
+	stop = high_resolution_clock::now();
+	duration = duration_cast<microseconds>(stop - start);
+
+	std::cout << "ob ltm time "
+			<< (double) duration.count() / 1000000.0 << "s" << endl;
+}
+
 int main(int argc, char *argv[]) {
 	//omp_set_dynamic(0);     // Explicitly disable dynamic teams
 	//omp_set_num_threads(8); // Use 4 threads for all consecutive
@@ -724,7 +751,7 @@ int main(int argc, char *argv[]) {
 		print_error_message(ret);
 		return -1;
 	}
-
+	//test_ob_ltm();
 	//test_texttruth_dp_overhead(true);
 	//return 0;
 
@@ -740,8 +767,23 @@ int main(int argc, char *argv[]) {
 //	}
 //
 //	return 0;
+	double delta = -32;
+	int worker_num = 24;
+	int question_num = 1000;
+	int word_num = 48;
+	vector<int> epsilons = {3};
+	for(int i=0; i<=1;i++) {
+		if(i==0) cout<<"This non oblivious version!!!"<<endl;
+		else if(i==1) cout<<"This oblivious version!!!"<<endl;
+		for(auto ep:epsilons) {
+			cout<<"epsilion:"<<ep<<endl;
+			test_texttruth_performance(i, worker_num, question_num, word_num, ep, delta);
+		}
+	}
 
-	bool oblivious = true;
+	return 0;
+
+	/*bool oblivious = true;
 	int top_k = 10;
 
 	// test texttruth performance
@@ -760,12 +802,12 @@ int main(int argc, char *argv[]) {
 
 	/*for (auto qn : num_questions) {
 		test_texttruth_performance(oblivious, worker_num, qn, word_num);
-	}*/
+	}
 	//test_texttruth_performance(oblivious, 3000, 20, 48);
 	//test_texttruth_topk_score();
 	for(auto wn:num_workers) {
 	 test_texttruth_performance(oblivious, wn, question_num, word_num);
-	 }
+	 }*/
 	//test_texttruth_performance(oblivious, 1000, question_num, word_num);
 	//test_texttruth(oblivious, top_k);
 	// Destroy the enclave

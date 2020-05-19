@@ -523,7 +523,7 @@ vector<int> parallel_weighted_sphere_kmeans(vector<string> &kws, vector<int> wei
 	for (int t=0; t < max_iter; t++) {
 		// e step
 		// assign new cluster
-		#pragma omp parallel for
+		//#pragma omp parallel for
 		for (int i = 0; i < kws.size(); i++) {
 
 			float max_prob = INT_MIN;
@@ -541,7 +541,7 @@ vector<int> parallel_weighted_sphere_kmeans(vector<string> &kws, vector<int> wei
 		// M step
 		// update parameters
 		vector<WordVec> new_clusters(cluster_num, WordVec(dimension, 0));
-		#pragma omp parallel for
+		//#pragma omp parallel for
 		for (int i = 0; i < kws.size(); i++) {
 			auto &keyword = kws[i];
 			int cluster_ind = cluster_assignment[i];
@@ -553,7 +553,7 @@ vector<int> parallel_weighted_sphere_kmeans(vector<string> &kws, vector<int> wei
 		}
 
 		//normalize mu
-		#pragma omp parallel for
+		//#pragma omp parallel for
 		for (int i = 0; i < cluster_num; i++) {
 			auto &mu = new_clusters[i];
 			float mu_l2 = sqrt(hpc::dot_product(mu, mu));
@@ -577,7 +577,7 @@ vector<int> parallel_weighted_sphere_kmeans(vector<string> &kws, vector<int> wei
 		} */
 
 		//set new cluster
-		#pragma omp parallel for
+		//#pragma omp parallel for
 		for (int i = 0; i < cluster_num; i++) {
 			clusters[i] = std::move(new_clusters[i]);
 		}
